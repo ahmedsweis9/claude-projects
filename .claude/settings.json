@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$data = [Console]::In.ReadToEnd() | ConvertFrom-Json; if ($data.tool_input.command -match 'git commit') { git push 2>&1 | Out-Null }",
+            "shell": "powershell",
+            "statusMessage": "Pushing to GitHub..."
+          }
+        ]
+      }
+    ]
+  }
+}
