@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Attendance — Tuition Manager</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">Tuition<span>Manager</span></div>
+  <div class="nav-section">Main</div>
+  <a href="/">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    Dashboard
+  </a>
+  <a href="/students.html">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Students
+  </a>
+  <a href="/attendance.html" class="active">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    Attendance
+  </a>
+  <a href="/payments.html">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+    Payments
+  </a>
+</nav>
+
+<main class="main">
+  <h1 class="page-title">Attendance</h1>
+  <p class="page-sub">Mark attendance for a session. Changes auto-save when you click Save.</p>
+
+  <div class="card">
+    <div class="card-header">Session Setup</div>
+    <div class="card-body">
+      <div class="toolbar" style="margin-bottom:0">
+        <div class="form-group" style="margin:0">
+          <label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:4px;display:block">Date</label>
+          <input type="date" id="att-date" onchange="loadSession()">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:4px;display:block">Grade</label>
+          <select id="att-grade" onchange="onGradeChange()">
+            <option value="">Select grade…</option>
+            <option>5</option><option>6</option><option>7</option><option>8</option>
+            <option>9</option><option>10</option><option>11</option><option>12</option>
+          </select>
+        </div>
+        <div class="form-group" id="section-group" style="margin:0;display:none">
+          <label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:4px;display:block">Section</label>
+          <select id="att-section" onchange="loadSession()">
+            <option value="boys">Boys</option>
+            <option value="girls">Girls</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:4px;display:block">Session #</label>
+          <select id="att-session" onchange="loadSession()">
+            <option value="1">Session 1</option>
+            <option value="2">Session 2</option>
+            <option value="3">Session 3 (Grade 5 only)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="schedule-info" class="card" style="display:none">
+    <div class="card-body" style="padding:12px 20px;font-size:13px;color:#64748b" id="schedule-text"></div>
+  </div>
+
+  <div class="card mb-0" id="checklist-card" style="display:none">
+    <div class="card-header">
+      <span id="checklist-title">Students</span>
+      <div class="flex gap-8">
+        <button class="btn btn-outline btn-sm" onclick="markAll('present')">All Present</button>
+        <button class="btn btn-danger btn-sm" onclick="markAll('absent')">All Absent</button>
+        <button class="btn btn-success" onclick="saveAttendance()">Save Attendance</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="att-list" id="att-list"></div>
+      <p id="no-students" class="text-muted" style="display:none;text-align:center;padding:32px">
+        No active students in this grade.
+      </p>
+    </div>
+  </div>
+
+  <div id="select-prompt" class="card">
+    <div class="card-body">
+      <div class="empty">
+        <div class="empty-icon">&#128197;</div>
+        <h3>Select a date and grade</h3>
+        <p>Choose the session details above to start marking attendance.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="save-toast" style="
+    display:none;position:fixed;bottom:24px;right:24px;
+    background:#16a34a;color:#fff;padding:12px 20px;
+    border-radius:8px;font-weight:600;font-size:13px;
+    box-shadow:0 4px 12px rgba(0,0,0,.2)">
+    &#10003; Attendance saved!
+  </div>
+</main>
+
+<script src="/js/attendance.js"></script>
+</body>
+</html>

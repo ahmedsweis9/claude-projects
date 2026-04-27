@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dashboard — Tuition Manager</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">Tuition<span>Manager</span></div>
+  <div class="nav-section">Main</div>
+  <a href="/" class="active">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    Dashboard
+  </a>
+  <a href="/students.html">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Students
+  </a>
+  <a href="/attendance.html">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    Attendance
+  </a>
+  <a href="/payments.html">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+    Payments
+  </a>
+</nav>
+
+<main class="main">
+  <div class="flex items-center justify-between mb-0">
+    <div>
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-sub" id="month-subtitle">Loading…</p>
+    </div>
+    <div class="month-nav">
+      <button onclick="changeMonth(-1)" title="Previous month">&#8249;</button>
+      <span class="month-label" id="month-label">–</span>
+      <button onclick="changeMonth(1)" title="Next month">&#8250;</button>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="stat-label">Active Students</div><div class="stat-value blue" id="stat-students">–</div></div>
+    <div class="stat-card"><div class="stat-label">Expected (OMR)</div><div class="stat-value" id="stat-expected">–</div></div>
+    <div class="stat-card"><div class="stat-label">Collected (OMR)</div><div class="stat-value green" id="stat-collected">–</div></div>
+    <div class="stat-card"><div class="stat-label">Outstanding (OMR)</div><div class="stat-value red" id="stat-outstanding">–</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span>&#9888; Payment Alerts — Unpaid / Partial</span>
+      <span class="badge badge-red" id="alert-count">–</span>
+    </div>
+    <div class="card-body">
+      <div id="alert-list" class="alert-list">
+        <div class="empty"><div class="empty-icon">&#10003;</div><h3>All paid up!</h3><p>No outstanding payments for this month.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Quick Attendance</div>
+    <div class="card-body">
+      <p class="text-muted" style="margin-bottom:14px;font-size:13px;">Jump straight to today's attendance for a grade:</p>
+      <div class="grade-pills" id="grade-pills"></div>
+    </div>
+  </div>
+</main>
+
+<script src="/js/dashboard.js"></script>
+</body>
+</html>

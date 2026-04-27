@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Payments — Tuition Manager</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">Tuition<span>Manager</span></div>
+  <div class="nav-section">Main</div>
+  <a href="/">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    Dashboard
+  </a>
+  <a href="/students.html">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Students
+  </a>
+  <a href="/attendance.html">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    Attendance
+  </a>
+  <a href="/payments.html" class="active">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+    Payments
+  </a>
+</nav>
+
+<main class="main">
+  <div class="flex items-center justify-between" style="margin-bottom:20px">
+    <div>
+      <h1 class="page-title">Payments</h1>
+      <p class="page-sub mb-0">Monthly payment overview. Click "Record" on any row to log a payment.</p>
+    </div>
+    <div class="month-nav">
+      <button onclick="changeMonth(-1)">&#8249;</button>
+      <span class="month-label" id="month-label">–</span>
+      <button onclick="changeMonth(1)">&#8250;</button>
+    </div>
+  </div>
+
+  <!-- Summary stats -->
+  <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="stat-card"><div class="stat-label">Expected (OMR)</div><div class="stat-value" id="stat-expected">–</div></div>
+    <div class="stat-card"><div class="stat-label">Collected (OMR)</div><div class="stat-value green" id="stat-collected">–</div></div>
+    <div class="stat-card"><div class="stat-label">Outstanding (OMR)</div><div class="stat-value red" id="stat-outstanding">–</div></div>
+  </div>
+
+  <div class="card mb-0">
+    <div class="card-header">
+      <span id="table-title">All Students</span>
+      <div class="flex gap-8">
+        <select id="status-filter" onchange="applyFilter()" style="padding:5px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+          <option value="all">All statuses</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="partial">Partial</option>
+          <option value="paid">Paid</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Grade</th>
+            <th>Amount Due</th>
+            <th>Amount Paid</th>
+            <th>Payment Date</th>
+            <th>Status</th>
+            <th>Notes</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="payments-tbody">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:#64748b">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Record Payment Modal -->
+<div class="modal-backdrop" id="pay-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="pay-modal-title">Record Payment</span>
+      <button class="modal-close" onclick="closePay()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <form id="pay-form" onsubmit="submitPayment(event)">
+        <input type="hidden" id="pf-student-id">
+        <input type="hidden" id="pf-month-hidden">
+        <div class="form-grid">
+          <div class="form-group span-2" id="pf-info" style="color:#64748b;font-size:13px"></div>
+          <div class="form-group">
+            <label>Amount Paid (OMR) *</label>
+            <input type="number" id="pf-amount" step="0.001" min="0" required>
+          </div>
+          <div class="form-group">
+            <label>Payment Date</label>
+            <input type="date" id="pf-date">
+          </div>
+          <div class="form-group span-2">
+            <label>Notes</label>
+            <input type="text" id="pf-notes" placeholder="Optional">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-success">Save Payment</button>
+          <button type="button" class="btn btn-outline" onclick="closePay()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="/js/payments.js"></script>
+</body>
+</html>

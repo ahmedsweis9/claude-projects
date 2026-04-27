@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Students — Tuition Manager</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">Tuition<span>Manager</span></div>
+  <div class="nav-section">Main</div>
+  <a href="/">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    Dashboard
+  </a>
+  <a href="/students.html" class="active">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Students
+  </a>
+  <a href="/attendance.html">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    Attendance
+  </a>
+  <a href="/payments.html">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+    Payments
+  </a>
+</nav>
+
+<main class="main">
+  <div class="flex items-center justify-between" style="margin-bottom:20px">
+    <div>
+      <h1 class="page-title">Students</h1>
+      <p class="page-sub mb-0" id="count-label">Loading…</p>
+    </div>
+    <button class="btn btn-primary" onclick="openAddModal()">+ Add Student</button>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Search by name…" oninput="loadStudents()" style="width:200px">
+    <select id="active-filter" onchange="loadStudents()">
+      <option value="1">Active</option>
+      <option value="0">Archived</option>
+      <option value="all">All</option>
+    </select>
+  </div>
+
+  <div class="grade-pills" style="margin-bottom:16px" id="grade-pills"></div>
+
+  <div class="card mb-0">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Grade</th>
+            <th>Student Phone</th>
+            <th>Parent</th>
+            <th>Parent Phone</th>
+            <th>Enrolled</th>
+            <th>This Month</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="student-tbody">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:#64748b">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Add / Edit Student Modal -->
+<div class="modal-backdrop" id="student-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="modal-title">Add Student</span>
+      <button class="modal-close" onclick="closeModal()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <form id="student-form" onsubmit="submitStudent(event)">
+        <input type="hidden" id="edit-id">
+        <div class="form-grid">
+          <div class="form-group span-2">
+            <label>Full Name *</label>
+            <input type="text" id="f-name" required>
+          </div>
+          <div class="form-group">
+            <label>Grade *</label>
+            <select id="f-grade" required onchange="onGradeChange()">
+              <option value="">Select…</option>
+              <option>5</option><option>6</option><option>7</option><option>8</option>
+              <option>9</option><option>10</option><option>11</option><option>12</option>
+            </select>
+          </div>
+          <div class="form-group" id="section-group" style="display:none">
+            <label>Section (Grade 11)</label>
+            <select id="f-section">
+              <option value="boys">Boys</option>
+              <option value="girls">Girls</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Enrollment Date *</label>
+            <input type="date" id="f-enrollment" required>
+          </div>
+          <div class="form-group" id="active-group" style="display:none">
+            <label>Status</label>
+            <select id="f-active">
+              <option value="1">Active</option>
+              <option value="0">Archived</option>
+            </select>
+          </div>
+
+          <div class="form-section-title">Student Contact</div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input type="tel" id="f-phone" placeholder="e.g. 9512 3456">
+          </div>
+          <div class="form-group">
+            <label>WhatsApp</label>
+            <input type="tel" id="f-whatsapp" placeholder="e.g. 9512 3456">
+          </div>
+
+          <div class="form-section-title">Parent / Guardian</div>
+          <div class="form-group span-2">
+            <label>Parent Name</label>
+            <input type="text" id="f-parent-name">
+          </div>
+          <div class="form-group">
+            <label>Parent Phone</label>
+            <input type="tel" id="f-parent-phone">
+          </div>
+          <div class="form-group">
+            <label>Parent WhatsApp</label>
+            <input type="tel" id="f-parent-whatsapp">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="submit-btn">Add Student</button>
+          <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="/js/students.js"></script>
+</body>
+</html>
