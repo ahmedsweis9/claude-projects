@@ -41,12 +41,15 @@ async function loadStudents() {
   tbody.innerHTML = students.map(s => {
     const paid = s.paid_this_month >= s.amount_due;
     const partial = s.paid_this_month > 0 && !paid;
-    const rowCls = paid ? 'row-paid' : partial ? 'row-partial' : 'row-unpaid';
+    const rowCls = paid ? 'row-paid' : partial ? 'row-partial' : s.not_yet_due ? '' : 'row-unpaid';
+    const dueLabel = s.due_date ? ` (due ${parseInt(s.due_date.split('-')[2])}th)` : '';
     const badge = paid
       ? '<span class="badge badge-green">Paid</span>'
-      : partial
-        ? `<span class="badge badge-amber">Partial (${s.paid_this_month.toFixed(3)})</span>`
-        : '<span class="badge badge-red">Unpaid</span>';
+      : s.not_yet_due
+        ? `<span class="badge badge-gray">Not yet due${dueLabel}</span>`
+        : partial
+          ? `<span class="badge badge-amber">Partial (${s.paid_this_month.toFixed(3)})</span>`
+          : '<span class="badge badge-red">Unpaid</span>';
     const section = s.section ? ` <span class="badge badge-gray">${capitalize(s.section)}</span>` : '';
     return `<tr class="${rowCls}">
       <td><a href="/student.html?id=${s.id}">${s.name}</a></td>

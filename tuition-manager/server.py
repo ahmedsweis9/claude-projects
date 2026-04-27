@@ -1,8 +1,29 @@
 import os
+import calendar
 import webbrowser
 from datetime import date
 from flask import Flask, jsonify, request, send_from_directory
 from database import get_db, init_db, monthly_fee, row_to_dict, rows_to_list
+
+
+def calc_due_day(enrollment_date_str: str, year: int, month: int) -> int:
+    """Return the payment due day for a given month, clamped to the last day of that month."""
+    enroll_day = int(enrollment_date_str.split('-')[2])
+    last_day = calendar.monthrange(year, month)[1]
+    return min(enroll_day, last_day)
+
+
+def annotate_due(students: list, month_str: str) -> list:
+    """Add due_day, due_date, and not_yet_due to each student dict."""
+    today = date.today()
+    current_month = today.strftime('%Y-%m')
+    y, m = map(int, month_str.split('-'))
+    for s in students:
+        dd = calc_due_day(s['enrollment_date'], y, m)
+        s['due_day'] = dd
+        s['due_date'] = f"{month_str}-{str(dd).zfill(2)}"
+        s['not_yet_due'] = (month_str == current_month) and (today.day < dd)
+    return students
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
@@ -39,10 +60,10 @@ def dashboard():
             (month,)
         ).fetchone()[0]
 
-        # Students with no fully-paid record this month
-        unpaid = rows_to_list(conn.execute("""
+        # All active students who haven't fully paid this month
+        candidates = rows_to_list(conn.execute("""
             SELECT s.id, s.name, s.grade, s.section,
-                   s.parent_phone, s.parent_whatsapp,
+                   s.enrollment_date, s.parent_phone, s.parent_whatsapp,
                    COALESCE(p.amount_paid, 0) AS amount_paid,
                    CASE WHEN s.grade<=8 THEN 50 ELSE 60 END AS amount_due
             FROM students s
@@ -51,6 +72,10 @@ def dashboard():
               AND (p.id IS NULL OR p.amount_paid < (CASE WHEN s.grade<=8 THEN 50 ELSE 60 END))
             ORDER BY s.grade, s.name
         """, (month,)).fetchall())
+
+        # Annotate with due date and filter out students not yet due this month
+        annotate_due(candidates, month)
+        unpaid = [s for s in candidates if not s['not_yet_due']]
 
     return jsonify({
         'month': month,
@@ -100,6 +125,7 @@ def list_students():
     with get_db() as conn:
         students = rows_to_list(conn.execute(query, params).fetchall())
 
+    annotate_due(students, month)
     return jsonify(students)
 
 

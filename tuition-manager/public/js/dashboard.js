@@ -51,10 +51,11 @@ async function load() {
       ? `Partial — ${fmtOMR(s.amount_paid)} paid, ${remaining} OMR remaining`
       : `Unpaid — ${fmtOMR(s.amount_due)} due`;
     const section = s.section ? ` (${capitalize(s.section)})` : '';
+    const dueInfo = s.due_date ? ` · Due: ${fmtDate(s.due_date)}` : '';
     return `<div class="${cls}">
       <div class="info">
         <span class="name"><a href="/student.html?id=${s.id}">${s.name}</a></span>
-        <span class="meta">Grade ${s.grade}${section} · ${status}</span>
+        <span class="meta">Grade ${s.grade}${section}${dueInfo} · ${status}</span>
       </div>
       <div class="flex gap-8">
         ${s.parent_phone ? `<a class="btn btn-outline btn-sm" href="https://wa.me/968${s.parent_whatsapp || s.parent_phone}" target="_blank">WhatsApp</a>` : ''}
@@ -80,5 +81,12 @@ function buildGradePills() {
 }
 
 function capitalize(s) { return s ? s[0].toUpperCase() + s.slice(1) : ''; }
+
+function fmtDate(iso) {
+  const [, , d] = iso.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dt = new Date(iso + 'T00:00:00');
+  return `${parseInt(d)} ${months[dt.getMonth()]}`;
+}
 
 load();

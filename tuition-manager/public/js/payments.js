@@ -46,6 +46,8 @@ async function load() {
 
   allRows = students.map(s => {
     const p = payMap[s.id];
+    const paid = p && p.amount_paid >= s.amount_due;
+    const partial = p && p.amount_paid > 0 && !paid;
     return {
       id:           s.id,
       name:         s.name,
@@ -55,7 +57,9 @@ async function load() {
       amount_paid:  p ? p.amount_paid : 0,
       payment_date: p ? p.payment_date : null,
       notes:        p ? p.notes : null,
-      status:       !p ? 'unpaid' : p.amount_paid >= s.amount_due ? 'paid' : 'partial',
+      due_date:     s.due_date,
+      not_yet_due:  s.not_yet_due,
+      status:       paid ? 'paid' : partial ? 'partial' : s.not_yet_due ? 'pending' : 'unpaid',
     };
   });
 
@@ -64,7 +68,10 @@ async function load() {
 
 function applyFilter() {
   const filter = document.getElementById('status-filter').value;
-  const rows = filter === 'all' ? allRows : allRows.filter(r => r.status === filter);
+  // 'unpaid' filter shows both unpaid and pending (not yet due) since both have no payment
+  const rows = filter === 'all' ? allRows
+    : filter === 'unpaid' ? allRows.filter(r => r.status === 'unpaid' || r.status === 'pending')
+    : allRows.filter(r => r.status === filter);
 
   document.getElementById('table-title').textContent =
     `${rows.length} student${rows.length !== 1 ? 's' : ''} — ${MONTHS[month]} ${year}`;
@@ -77,12 +84,18 @@ function applyFilter() {
   }
 
   tbody.innerHTML = rows.map(r => {
-    const rowCls = r.status === 'paid' ? 'row-paid' : r.status === 'partial' ? 'row-partial' : 'row-unpaid';
-    const badge  = r.status === 'paid'
+    const rowCls = r.status === 'paid' ? 'row-paid'
+      : r.status === 'partial' ? 'row-partial'
+      : r.status === 'pending' ? ''
+      : 'row-unpaid';
+    const dueDay = r.due_date ? parseInt(r.due_date.split('-')[2]) : null;
+    const badge = r.status === 'paid'
       ? '<span class="badge badge-green">Paid</span>'
       : r.status === 'partial'
         ? '<span class="badge badge-amber">Partial</span>'
-        : '<span class="badge badge-red">Unpaid</span>';
+        : r.status === 'pending'
+          ? `<span class="badge badge-gray">Due ${dueDay ? 'on ' + dueDay + fmtOrdinal(dueDay) : '—'}</span>`
+          : '<span class="badge badge-red">Unpaid</span>';
     const section = r.section ? ` <span class="badge badge-gray" style="font-size:10px">${capitalize(r.section)}</span>` : '';
     const highlight = highlightStudentId === r.id ? ' style="outline:2px solid #2563eb"' : '';
     return `<tr class="${rowCls}"${highlight}>
@@ -94,9 +107,9 @@ function applyFilter() {
       <td>${badge}</td>
       <td>${r.notes || '—'}</td>
       <td class="text-right">
-        <button class="btn btn-primary btn-sm" onclick='openPay(${JSON.stringify(r)})'>
-          ${r.status === 'unpaid' ? 'Record' : 'Update'}
-        </button>
+        ${r.status !== 'pending' || r.amount_paid > 0
+          ? `<button class="btn btn-primary btn-sm" onclick='openPay(${JSON.stringify(r)})'>${r.status === 'unpaid' || r.status === 'pending' ? 'Record' : 'Update'}</button>`
+          : `<button class="btn btn-outline btn-sm" onclick='openPay(${JSON.stringify(r)})'>Record early</button>`}
       </td>
     </tr>`;
   }).join('');
@@ -146,5 +159,9 @@ async function submitPayment(e) {
 
 function fmtOMR(n) { return Number(n).toFixed(3) + ' OMR'; }
 function capitalize(s) { return s ? s[0].toUpperCase() + s.slice(1) : ''; }
+function fmtOrdinal(n) {
+  const s = ['th','st','nd','rd'], v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+}
 
 load();
