@@ -5,7 +5,7 @@ import webbrowser
 from datetime import date
 from flask import Flask, jsonify, request, send_from_directory, session, redirect, Response
 from werkzeug.security import generate_password_hash, check_password_hash
-from database import get_db, init_db, monthly_fee, row_to_dict, rows_to_list
+from database import get_db, init_db, monthly_fee, row_to_dict, rows_to_list, insert_returning_id, IGNORE, CONFLICT_IGNORE
 
 try:
     from dotenv import load_dotenv
@@ -70,11 +70,10 @@ def signup():
     with get_db() as conn:
         if conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone():
             return jsonify({'error': 'Email already registered'}), 400
-        cur = conn.execute(
+        user_id = insert_returning_id(conn,
             "INSERT INTO users (name, email, password) VALUES (?,?,?)",
             (name, email, pw_hash)
         )
-        user_id = cur.lastrowid
     session['user_id']   = user_id
     session['user_name'] = name
     return jsonify({'ok': True, 'name': name})
@@ -221,7 +220,7 @@ def create_student():
     section = d.get('section')
     user_id = uid()
     with get_db() as conn:
-        cur = conn.execute("""
+        student_id = insert_returning_id(conn, """
             INSERT INTO students
               (user_id, name, grade, section, phone, whatsapp,
                parent_name, parent_phone, parent_whatsapp, enrollment_date, active)
@@ -232,7 +231,6 @@ def create_student():
             d.get('parent_name'), d.get('parent_phone'), d.get('parent_whatsapp'),
             d.get('enrollment_date', date.today().isoformat())
         ))
-        student_id = cur.lastrowid
         student = row_to_dict(conn.execute(
             "SELECT * FROM students WHERE id=?", (student_id,)
         ).fetchone())
@@ -340,12 +338,11 @@ def record_payment():
                   d.get('notes'), existing['id']))
             payment_id = existing['id']
         else:
-            cur = conn.execute("""
+            payment_id = insert_returning_id(conn, """
                 INSERT INTO payments (student_id, month, amount_due, amount_paid, payment_date, notes)
                 VALUES (?,?,?,?,?,?)
             """, (sid, month, fee, amount_paid,
                   d.get('payment_date', date.today().isoformat()), d.get('notes')))
-            payment_id = cur.lastrowid
 
         payment = row_to_dict(conn.execute(
             "SELECT * FROM payments WHERE id=?", (payment_id,)
@@ -421,11 +418,10 @@ def record_attendance():
                 )
                 aid = existing['id']
             else:
-                cur = conn.execute("""
+                aid = insert_returning_id(conn, """
                     INSERT INTO attendance (student_id, session_date, session_number, duration_hours, status)
                     VALUES (?,?,?,?,?)
                 """, (sid, sdate, snum, float(r.get('duration_hours', 2)), r.get('status', 'present')))
-                aid = cur.lastrowid
 
             saved.append(row_to_dict(conn.execute(
                 "SELECT * FROM attendance WHERE id=?", (aid,)
@@ -509,7 +505,7 @@ def import_data():
             if existing:
                 id_map[s['id']] = existing['id']
                 continue
-            cur = conn.execute("""
+            id_map[s['id']] = insert_returning_id(conn, """
                 INSERT INTO students
                   (user_id, name, grade, section, phone, whatsapp,
                    parent_name, parent_phone, parent_whatsapp, enrollment_date, active)
@@ -518,16 +514,16 @@ def import_data():
                   s.get('phone'), s.get('whatsapp'), s.get('parent_name'),
                   s.get('parent_phone'), s.get('parent_whatsapp'),
                   s['enrollment_date'], s.get('active', 1)))
-            id_map[s['id']] = cur.lastrowid
 
         for p in data.get('payments', []):
             new_sid = id_map.get(p['student_id'])
             if not new_sid:
                 continue
-            conn.execute("""
-                INSERT OR IGNORE INTO payments
+            conn.execute(f"""
+                INSERT {IGNORE} INTO payments
                   (student_id, month, amount_due, amount_paid, payment_date, notes)
                 VALUES (?,?,?,?,?,?)
+                {CONFLICT_IGNORE}
             """, (new_sid, p['month'], p['amount_due'], p['amount_paid'],
                   p.get('payment_date'), p.get('notes')))
 
@@ -535,10 +531,11 @@ def import_data():
             new_sid = id_map.get(a['student_id'])
             if not new_sid:
                 continue
-            conn.execute("""
-                INSERT OR IGNORE INTO attendance
+            conn.execute(f"""
+                INSERT {IGNORE} INTO attendance
                   (student_id, session_date, session_number, duration_hours, status)
                 VALUES (?,?,?,?,?)
+                {CONFLICT_IGNORE}
             """, (new_sid, a['session_date'], a['session_number'],
                   a['duration_hours'], a['status']))
 
