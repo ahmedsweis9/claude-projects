@@ -10,7 +10,14 @@
 
 <nav class="nav">
   <div class="nav-brand">Tuition<span>Manager</span></div>
-  <div class="nav-section">Main</div>
+  <div class="nav-user" id="nav-user" style="display:none">
+    <div class="nav-user-avatar" id="nav-avatar">?</div>
+    <div class="nav-user-info">
+      <div class="nav-user-name" id="nav-name">Loading…</div>
+      <div class="nav-user-role">Tutor</div>
+    </div>
+  </div>
+  <div class="nav-section">Menu</div>
   <a href="/">
     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
     Dashboard
@@ -32,43 +39,47 @@
     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
     Data
   </a>
+  <div class="nav-spacer"></div>
+  <div class="nav-logout">
+    <button onclick="logout()">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sign out
+    </button>
+  </div>
 </nav>
 
 <main class="main">
   <h1 class="page-title">Data Management</h1>
-  <p class="page-sub">Export your data for backup or to migrate it to a new server. Import to restore.</p>
+  <p class="page-sub">Export your data for backup or migrate it to another instance.</p>
 
-  <!-- Export -->
   <div class="card">
     <div class="card-header">Export Data</div>
     <div class="card-body">
-      <p style="font-size:13px;color:#64748b;margin-bottom:16px">
-        Downloads all students, payments, and attendance as a JSON file you can keep as a backup
-        or upload to another instance of this app.
+      <p style="font-size:13px;color:#6b7280;margin-bottom:16px">
+        Downloads all your students, payments, and attendance as a JSON file you can keep as a backup or upload to another instance.
       </p>
       <a class="btn btn-primary" href="/api/admin/export" download="tuition-backup.json">
-        Download backup.json
+        &#11123; Download backup.json
       </a>
     </div>
   </div>
 
-  <!-- Import -->
   <div class="card">
     <div class="card-header">Import Data</div>
     <div class="card-body">
-      <p style="font-size:13px;color:#64748b;margin-bottom:16px">
-        Upload a <code style="background:#f1f5f9;padding:1px 5px;border-radius:4px">tuition-backup.json</code>
-        file exported from another instance. Records that already exist (by ID) are skipped — no duplicates.
+      <p style="font-size:13px;color:#6b7280;margin-bottom:16px">
+        Upload a <code style="background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:12px">tuition-backup.json</code>
+        exported from another instance. Existing records are matched by name to avoid duplicates.
       </p>
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <label class="btn btn-outline" style="cursor:pointer">
           Choose file…
           <input type="file" id="import-file" accept=".json" style="display:none" onchange="onFileChosen(this)">
         </label>
-        <span id="file-name" style="font-size:13px;color:#64748b">No file chosen</span>
-        <button class="btn btn-success" id="import-btn" onclick="doImport()" disabled>Upload &amp; Import</button>
+        <span id="file-name" style="font-size:13px;color:#6b7280">No file chosen</span>
+        <button class="btn btn-success" id="import-btn" onclick="doImport()" disabled>&#11121; Upload &amp; Import</button>
       </div>
-      <div id="import-result" style="display:none;margin-top:16px;padding:12px 16px;border-radius:7px;font-size:13px"></div>
+      <div id="import-result" style="display:none;margin-top:16px;padding:12px 16px;border-radius:8px;font-size:13px"></div>
     </div>
   </div>
 </main>
@@ -76,29 +87,22 @@
 <script src="/js/auth.js"></script>
 <script>
   function onFileChosen(input) {
-    document.getElementById('file-name').textContent = input.files[0]
-      ? input.files[0].name
-      : 'No file chosen';
+    document.getElementById('file-name').textContent = input.files[0] ? input.files[0].name : 'No file chosen';
     document.getElementById('import-btn').disabled = !input.files[0];
   }
 
   async function doImport() {
     const file = document.getElementById('import-file').files[0];
     if (!file) return;
-    const btn = document.getElementById('import-btn');
+    const btn    = document.getElementById('import-btn');
     const result = document.getElementById('import-result');
-    btn.disabled = true;
-    btn.textContent = 'Importing…';
-    result.style.display = 'none';
+    btn.disabled = true; btn.textContent = 'Importing…'; result.style.display = 'none';
 
     let data;
-    try {
-      data = JSON.parse(await file.text());
-    } catch {
+    try { data = JSON.parse(await file.text()); }
+    catch {
       showResult(false, 'Invalid JSON file.');
-      btn.disabled = false;
-      btn.textContent = 'Upload & Import';
-      return;
+      btn.disabled = false; btn.textContent = '↑ Upload & Import'; return;
     }
 
     const res = await fetch('/api/admin/import', {
@@ -109,23 +113,20 @@
 
     if (res.ok) {
       const r = await res.json();
-      showResult(true,
-        `Imported ${r.imported.students} students, ${r.imported.payments} payments, ${r.imported.attendance} attendance records.`
-      );
+      showResult(true, `Imported ${r.imported.students} students, ${r.imported.payments} payments, ${r.imported.attendance} attendance records.`);
     } else {
       showResult(false, 'Import failed. Check the file and try again.');
     }
-    btn.disabled = false;
-    btn.textContent = 'Upload & Import';
+    btn.disabled = false; btn.textContent = '↑ Upload & Import';
   }
 
   function showResult(ok, msg) {
     const el = document.getElementById('import-result');
     el.style.display = 'block';
     el.style.background = ok ? '#f0fdf4' : '#fef2f2';
-    el.style.border = ok ? '1px solid #86efac' : '1px solid #fca5a5';
-    el.style.color = ok ? '#166534' : '#dc2626';
-    el.textContent = (ok ? '✓ ' : '✗ ') + msg;
+    el.style.border     = ok ? '1px solid #86efac' : '1px solid #fca5a5';
+    el.style.color      = ok ? '#166534' : '#dc2626';
+    el.textContent      = (ok ? '✓ ' : '✗ ') + msg;
   }
 </script>
 </body>

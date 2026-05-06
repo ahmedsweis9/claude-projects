@@ -1,22 +1,21 @@
-// Grade 5 session durations: [1, 1, 2]; others: [2, 2]
 const SESSION_DURATIONS = { 5: [1, 1, 2] };
 const DEFAULT_DURATION  = [2, 2];
 
 let students = [];
 let statuses = {};
 
-// Pre-fill from URL params (dashboard quick-links)
-const urlp = new URLSearchParams(location.search);
+const urlp  = new URLSearchParams(location.search);
 const today = new Date().toISOString().split('T')[0];
+
 document.getElementById('att-date').value = urlp.get('date') || today;
-if (urlp.get('grade')) document.getElementById('att-grade').value = urlp.get('grade');
+if (urlp.get('grade'))   document.getElementById('att-grade').value   = urlp.get('grade');
 if (urlp.get('section')) document.getElementById('att-section').value = urlp.get('section');
 
 function onGradeChange() {
   const g = document.getElementById('att-grade').value;
-  document.getElementById('section-group').style.display = g === '11' ? '' : 'none';
+  // Section selector is always visible once a grade is selected
+  document.getElementById('section-group').style.display = g ? '' : 'none';
 
-  // Limit session 3 option to grade 5
   const s3 = document.querySelector('#att-session option[value="3"]');
   s3.disabled = g !== '5';
   if (document.getElementById('att-session').value === '3' && g !== '5') {
@@ -27,43 +26,34 @@ function onGradeChange() {
 
 async function loadSession() {
   const grade   = document.getElementById('att-grade').value;
+  const section = document.getElementById('att-section').value;
   const date    = document.getElementById('att-date').value;
-  const session = document.getElementById('att-session').value;
+  const sess    = document.getElementById('att-session').value;
 
   if (!grade || !date) return;
 
-  document.getElementById('select-prompt').style.display = 'none';
+  document.getElementById('select-prompt').style.display  = 'none';
   document.getElementById('checklist-card').style.display = '';
-  document.getElementById('schedule-info').style.display = '';
+  document.getElementById('schedule-info').style.display  = '';
 
-  const params = new URLSearchParams({ grade, date, session_number: session });
+  const params = new URLSearchParams({ grade, section, date, session_number: sess });
   students = await fetch(`/api/attendance/session?${params}`).then(r => r.json());
 
-  // Init statuses from existing data or default to present
   statuses = {};
-  students.forEach(s => {
-    statuses[s.id] = s.existing_status || 'present';
-  });
-
-  // Section filter for grade 11
-  if (grade === '11') {
-    const section = document.getElementById('att-section').value;
-    students = students.filter(s => s.section === section);
-  }
+  students.forEach(s => { statuses[s.id] = s.existing_status || 'present'; });
 
   const durations = SESSION_DURATIONS[parseInt(grade)] || DEFAULT_DURATION;
-  const dur = durations[parseInt(session) - 1] || 2;
+  const dur = durations[parseInt(sess) - 1] || 2;
 
   const scheduleEl = document.getElementById('schedule-text');
   if (grade === '5') {
-    scheduleEl.textContent = `Grade 5 schedule: 3 sessions/week — 1hr + 1hr + 2hr. This is Session ${session} (${dur}hr).`;
+    scheduleEl.textContent = `Grade 5: 3 sessions/week — 1hr + 1hr + 2hr. Session ${sess} (${dur}hr).`;
   } else {
-    scheduleEl.textContent = `Grade ${grade} schedule: 2 sessions/week — 2hr each. This is Session ${session} (${dur}hr).`;
+    scheduleEl.textContent = `Grade ${grade}: 2 sessions/week — 2hr each. Session ${sess} (${dur}hr).`;
   }
 
-  const title = document.getElementById('checklist-title');
-  const section = grade === '11' ? ` · ${capitalize(document.getElementById('att-section').value)}` : '';
-  title.textContent = `Grade ${grade}${section} — ${date} — Session ${session}`;
+  document.getElementById('checklist-title').textContent =
+    `Grade ${grade} ${capitalize(section)} — ${date} — Session ${sess}`;
 
   renderList();
 }
@@ -71,14 +61,10 @@ async function loadSession() {
 function renderList() {
   const list = document.getElementById('att-list');
   const none = document.getElementById('no-students');
-
   if (!students.length) {
-    list.innerHTML = '';
-    none.style.display = '';
-    return;
+    list.innerHTML = ''; none.style.display = ''; return;
   }
   none.style.display = 'none';
-
   list.innerHTML = students.map(s => {
     const cur = statuses[s.id] || 'present';
     return `<div class="att-row" id="row-${s.id}">
@@ -110,14 +96,14 @@ function markAll(status) {
 async function saveAttendance() {
   const grade   = document.getElementById('att-grade').value;
   const date    = document.getElementById('att-date').value;
-  const session = parseInt(document.getElementById('att-session').value);
+  const sess    = parseInt(document.getElementById('att-session').value);
   const durations = SESSION_DURATIONS[parseInt(grade)] || DEFAULT_DURATION;
-  const dur = durations[session - 1] || 2;
+  const dur = durations[sess - 1] || 2;
 
   const records = students.map(s => ({
     student_id:     s.id,
     session_date:   date,
-    session_number: session,
+    session_number: sess,
     duration_hours: dur,
     status:         statuses[s.id] || 'present',
   }));
@@ -135,5 +121,4 @@ async function saveAttendance() {
 
 function capitalize(s) { return s ? s[0].toUpperCase() + s.slice(1) : ''; }
 
-// Auto-load if grade came from URL
 if (urlp.get('grade')) { onGradeChange(); }

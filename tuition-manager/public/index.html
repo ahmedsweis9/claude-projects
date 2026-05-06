@@ -10,7 +10,14 @@
 
 <nav class="nav">
   <div class="nav-brand">Tuition<span>Manager</span></div>
-  <div class="nav-section">Main</div>
+  <div class="nav-user" id="nav-user" style="display:none">
+    <div class="nav-user-avatar" id="nav-avatar">?</div>
+    <div class="nav-user-info">
+      <div class="nav-user-name" id="nav-name">Loading…</div>
+      <div class="nav-user-role">Tutor</div>
+    </div>
+  </div>
+  <div class="nav-section">Menu</div>
   <a href="/" class="active">
     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
     Dashboard
@@ -32,13 +39,20 @@
     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
     Data
   </a>
+  <div class="nav-spacer"></div>
+  <div class="nav-logout">
+    <button onclick="logout()">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sign out
+    </button>
+  </div>
 </nav>
 
 <main class="main">
-  <div class="flex items-center justify-between mb-0">
+  <div class="flex items-center justify-between mb-0" style="margin-bottom:6px">
     <div>
       <h1 class="page-title">Dashboard</h1>
-      <p class="page-sub" id="month-subtitle">Loading…</p>
+      <p class="page-sub" id="month-subtitle" style="margin-bottom:0">Loading…</p>
     </div>
     <div class="month-nav">
       <button onclick="changeMonth(-1)" title="Previous month">&#8249;</button>
@@ -47,21 +61,39 @@
     </div>
   </div>
 
+  <div style="margin-bottom:28px"></div>
+
   <div class="stats-grid" id="stats-grid">
-    <div class="stat-card"><div class="stat-label">Active Students</div><div class="stat-value blue" id="stat-students">–</div></div>
-    <div class="stat-card"><div class="stat-label">Expected (OMR)</div><div class="stat-value" id="stat-expected">–</div></div>
-    <div class="stat-card"><div class="stat-label">Collected (OMR)</div><div class="stat-value green" id="stat-collected">–</div></div>
-    <div class="stat-card"><div class="stat-label">Outstanding (OMR)</div><div class="stat-value red" id="stat-outstanding">–</div></div>
+    <div class="stat-card">
+      <div class="stat-icon blue">&#128100;</div>
+      <div class="stat-label">Active Students</div>
+      <div class="stat-value blue" id="stat-students">–</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon amber">&#128181;</div>
+      <div class="stat-label">Expected (OMR)</div>
+      <div class="stat-value" id="stat-expected">–</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green">&#10003;</div>
+      <div class="stat-label">Collected (OMR)</div>
+      <div class="stat-value green" id="stat-collected">–</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon red">&#9888;</div>
+      <div class="stat-label">Outstanding (OMR)</div>
+      <div class="stat-value red" id="stat-outstanding">–</div>
+    </div>
   </div>
 
   <div class="card">
     <div class="card-header">
-      <span>&#9888; Payment Alerts — Unpaid / Partial</span>
+      <span>Payment Alerts — Unpaid / Partial</span>
       <span class="badge badge-red" id="alert-count">–</span>
     </div>
     <div class="card-body">
       <div id="alert-list" class="alert-list">
-        <div class="empty"><div class="empty-icon">&#10003;</div><h3>All paid up!</h3><p>No outstanding payments for this month.</p></div>
+        <div class="empty"><div class="empty-icon">&#10003;</div><h3>All paid up!</h3><p>No outstanding payments this month.</p></div>
       </div>
     </div>
   </div>
@@ -69,7 +101,7 @@
   <div class="card">
     <div class="card-header">Quick Attendance</div>
     <div class="card-body">
-      <p class="text-muted" style="margin-bottom:14px;font-size:13px;">Jump straight to today's attendance for a grade:</p>
+      <p class="text-muted" style="margin-bottom:14px;font-size:13px">Jump to today's attendance by grade and section:</p>
       <div class="grade-pills" id="grade-pills"></div>
     </div>
   </div>

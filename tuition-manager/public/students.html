@@ -10,7 +10,14 @@
 
 <nav class="nav">
   <div class="nav-brand">Tuition<span>Manager</span></div>
-  <div class="nav-section">Main</div>
+  <div class="nav-user" id="nav-user" style="display:none">
+    <div class="nav-user-avatar" id="nav-avatar">?</div>
+    <div class="nav-user-info">
+      <div class="nav-user-name" id="nav-name">Loading…</div>
+      <div class="nav-user-role">Tutor</div>
+    </div>
+  </div>
+  <div class="nav-section">Menu</div>
   <a href="/">
     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
     Dashboard
@@ -32,6 +39,13 @@
     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
     Data
   </a>
+  <div class="nav-spacer"></div>
+  <div class="nav-logout">
+    <button onclick="logout()">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sign out
+    </button>
+  </div>
 </nav>
 
 <main class="main">
@@ -100,8 +114,8 @@
               <option>9</option><option>10</option><option>11</option><option>12</option>
             </select>
           </div>
-          <div class="form-group" id="section-group" style="display:none">
-            <label>Section (Grade 11)</label>
+          <div class="form-group" id="section-group">
+            <label>Section *</label>
             <select id="f-section">
               <option value="boys">Boys</option>
               <option value="girls">Girls</option>

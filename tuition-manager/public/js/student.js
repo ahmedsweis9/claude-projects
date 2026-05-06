@@ -1,5 +1,5 @@
 const params = new URLSearchParams(location.search);
-const sid = params.get('id');
+const sid   = params.get('id');
 const today = new Date().toISOString().split('T')[0];
 
 let studentData = null;
@@ -91,26 +91,25 @@ function renderAttendance(records) {
 
 function openEditModal() {
   const s = studentData;
-  document.getElementById('ef-name').value           = s.name;
-  document.getElementById('ef-grade').value          = s.grade;
-  document.getElementById('ef-enrollment').value     = s.enrollment_date;
-  document.getElementById('ef-phone').value          = s.phone || '';
-  document.getElementById('ef-whatsapp').value       = s.whatsapp || '';
-  document.getElementById('ef-parent-name').value    = s.parent_name || '';
-  document.getElementById('ef-parent-phone').value   = s.parent_phone || '';
-  document.getElementById('ef-parent-whatsapp').value= s.parent_whatsapp || '';
-  document.getElementById('ef-active').value         = s.active;
-  const g11 = String(s.grade) === '11';
-  document.getElementById('ef-section-group').style.display = g11 ? '' : 'none';
-  if (g11) document.getElementById('ef-section').value = s.section || 'boys';
+  document.getElementById('ef-name').value            = s.name;
+  document.getElementById('ef-grade').value           = s.grade;
+  document.getElementById('ef-section').value         = s.section || 'boys';
+  document.getElementById('ef-enrollment').value      = s.enrollment_date;
+  document.getElementById('ef-phone').value           = s.phone || '';
+  document.getElementById('ef-whatsapp').value        = s.whatsapp || '';
+  document.getElementById('ef-parent-name').value     = s.parent_name || '';
+  document.getElementById('ef-parent-phone').value    = s.parent_phone || '';
+  document.getElementById('ef-parent-whatsapp').value = s.parent_whatsapp || '';
+  document.getElementById('ef-active').value          = s.active;
+  document.getElementById('ef-section-group').style.display = '';
   document.getElementById('edit-modal').classList.add('open');
 }
 
 function closeEdit() { document.getElementById('edit-modal').classList.remove('open'); }
 
 function onEditGradeChange() {
-  const g = document.getElementById('ef-grade').value;
-  document.getElementById('ef-section-group').style.display = g === '11' ? '' : 'none';
+  // Section applies to all grades
+  document.getElementById('ef-section-group').style.display = '';
 }
 
 async function submitEdit(e) {
@@ -139,8 +138,7 @@ async function submitEdit(e) {
 // ── Payment Modal ─────────────────────────────────────────────────────────────
 
 function openPaymentModal() {
-  const currentMonth = today.slice(0, 7);
-  document.getElementById('pf-month').value  = currentMonth;
+  document.getElementById('pf-month').value  = today.slice(0, 7);
   document.getElementById('pf-date').value   = today;
   document.getElementById('pf-amount').value = studentData ? studentData.amount_due : '';
   document.getElementById('pf-notes').value  = '';
@@ -169,8 +167,6 @@ async function submitPayment(e) {
   closePayment();
   load();
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtMonth(m) {
   const [y, mo] = m.split('-');

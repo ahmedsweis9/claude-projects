@@ -4,6 +4,7 @@ import calendar
 import webbrowser
 from datetime import date
 from flask import Flask, jsonify, request, send_from_directory, session, redirect, Response
+from werkzeug.security import generate_password_hash, check_password_hash
 from database import get_db, init_db, monthly_fee, row_to_dict, rows_to_list
 
 try:
@@ -31,22 +32,23 @@ def annotate_due(students: list, month_str: str) -> list:
     return students
 
 
+def uid():
+    return session.get('user_id')
+
+
 app = Flask(__name__, static_folder='public', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
 
-ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'test1')
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'test123')
-
 init_db()
 
-_OPEN_PREFIXES = ('/login.html', '/api/login', '/css/', '/js/auth.js')
+_OPEN_PREFIXES = ('/login.html', '/signup.html', '/api/login', '/api/signup', '/css/', '/js/auth.js')
 
 
 @app.before_request
 def require_login():
     if any(request.path == p or request.path.startswith(p) for p in _OPEN_PREFIXES):
         return
-    if not session.get('logged_in'):
+    if not session.get('user_id'):
         if request.path.startswith('/api/'):
             return jsonify({'error': 'Unauthorized'}), 401
         return redirect('/login.html')
@@ -54,21 +56,60 @@ def require_login():
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
+@app.route('/api/signup', methods=['POST'])
+def signup():
+    d = request.json or {}
+    name     = d.get('name', '').strip()
+    email    = d.get('email', '').strip().lower()
+    password = d.get('password', '')
+    if not name or not email or not password:
+        return jsonify({'error': 'All fields are required'}), 400
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    pw_hash = generate_password_hash(password)
+    with get_db() as conn:
+        if conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone():
+            return jsonify({'error': 'Email already registered'}), 400
+        cur = conn.execute(
+            "INSERT INTO users (name, email, password) VALUES (?,?,?)",
+            (name, email, pw_hash)
+        )
+        user_id = cur.lastrowid
+    session['user_id']   = user_id
+    session['user_name'] = name
+    return jsonify({'ok': True, 'name': name})
+
+
 @app.route('/api/login', methods=['POST'])
 def login():
     d = request.json or {}
-    ok = (hmac.compare_digest(d.get('username', ''), ADMIN_USERNAME) and
-          hmac.compare_digest(d.get('password', ''), ADMIN_PASSWORD))
-    if ok:
-        session['logged_in'] = True
-        return jsonify({'ok': True})
-    return jsonify({'error': 'Invalid credentials'}), 401
+    email    = d.get('email', '').strip().lower()
+    password = d.get('password', '')
+    with get_db() as conn:
+        user = row_to_dict(conn.execute(
+            "SELECT * FROM users WHERE email=?", (email,)
+        ).fetchone())
+    if not user or not check_password_hash(user['password'], password):
+        return jsonify({'error': 'Invalid email or password'}), 401
+    session['user_id']   = user['id']
+    session['user_name'] = user['name']
+    return jsonify({'ok': True, 'name': user['name']})
 
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
     session.clear()
     return jsonify({'ok': True})
+
+
+@app.route('/api/me')
+def me():
+    user = None
+    with get_db() as conn:
+        user = row_to_dict(conn.execute(
+            "SELECT id, name, email FROM users WHERE id=?", (uid(),)
+        ).fetchone())
+    return jsonify(user or {})
 
 
 # ── Static pages ──────────────────────────────────────────────────────────────
@@ -86,22 +127,23 @@ def static_files(path):
 
 @app.route('/api/dashboard')
 def dashboard():
-    month = request.args.get('month', date.today().strftime('%Y-%m'))
+    month   = request.args.get('month', date.today().strftime('%Y-%m'))
+    user_id = uid()
     with get_db() as conn:
         total_students = conn.execute(
-            "SELECT COUNT(*) FROM students WHERE active=1"
+            "SELECT COUNT(*) FROM students WHERE active=1 AND user_id=?", (user_id,)
         ).fetchone()[0]
 
         expected = conn.execute(
             "SELECT COALESCE(SUM(CASE WHEN grade<=8 THEN 50 ELSE 60 END),0) "
-            "FROM students WHERE active=1"
+            "FROM students WHERE active=1 AND user_id=?", (user_id,)
         ).fetchone()[0]
 
         collected = conn.execute(
             "SELECT COALESCE(SUM(p.amount_paid),0) FROM payments p "
             "JOIN students s ON s.id=p.student_id "
-            "WHERE p.month=? AND s.active=1",
-            (month,)
+            "WHERE p.month=? AND s.active=1 AND s.user_id=?",
+            (month, user_id)
         ).fetchone()[0]
 
         candidates = rows_to_list(conn.execute("""
@@ -111,10 +153,10 @@ def dashboard():
                    CASE WHEN s.grade<=8 THEN 50 ELSE 60 END AS amount_due
             FROM students s
             LEFT JOIN payments p ON p.student_id=s.id AND p.month=?
-            WHERE s.active=1
+            WHERE s.active=1 AND s.user_id=?
               AND (p.id IS NULL OR p.amount_paid < (CASE WHEN s.grade<=8 THEN 50 ELSE 60 END))
             ORDER BY s.grade, s.name
-        """, (month,)).fetchall())
+        """, (month, user_id)).fetchall())
 
         annotate_due(candidates, month)
         unpaid = [s for s in candidates if not s['not_yet_due']]
@@ -133,11 +175,12 @@ def dashboard():
 
 @app.route('/api/students', methods=['GET'])
 def list_students():
-    grade = request.args.get('grade')
+    grade   = request.args.get('grade')
     section = request.args.get('section')
-    active = request.args.get('active', '1')
-    search = request.args.get('search', '').strip()
-    month = request.args.get('month', date.today().strftime('%Y-%m'))
+    active  = request.args.get('active', '1')
+    search  = request.args.get('search', '').strip()
+    month   = request.args.get('month', date.today().strftime('%Y-%m'))
+    user_id = uid()
 
     query = """
         SELECT s.*,
@@ -145,9 +188,9 @@ def list_students():
                CASE WHEN s.grade<=8 THEN 50 ELSE 60 END AS amount_due
         FROM students s
         LEFT JOIN payments p ON p.student_id=s.id AND p.month=?
-        WHERE 1=1
+        WHERE s.user_id=?
     """
-    params = [month]
+    params = [month, user_id]
 
     if active != 'all':
         query += " AND s.active=?"
@@ -173,17 +216,18 @@ def list_students():
 
 @app.route('/api/students', methods=['POST'])
 def create_student():
-    d = request.json
-    grade = int(d['grade'])
-    section = d.get('section') if grade == 11 else None
+    d       = request.json
+    grade   = int(d['grade'])
+    section = d.get('section')
+    user_id = uid()
     with get_db() as conn:
         cur = conn.execute("""
             INSERT INTO students
-              (name, grade, section, phone, whatsapp,
+              (user_id, name, grade, section, phone, whatsapp,
                parent_name, parent_phone, parent_whatsapp, enrollment_date, active)
-            VALUES (?,?,?,?,?,?,?,?,?,1)
+            VALUES (?,?,?,?,?,?,?,?,?,?,1)
         """, (
-            d['name'], grade, section,
+            user_id, d['name'], grade, section,
             d.get('phone'), d.get('whatsapp'),
             d.get('parent_name'), d.get('parent_phone'), d.get('parent_whatsapp'),
             d.get('enrollment_date', date.today().isoformat())
@@ -197,9 +241,10 @@ def create_student():
 
 @app.route('/api/students/<int:sid>', methods=['GET'])
 def get_student(sid):
+    user_id = uid()
     with get_db() as conn:
         student = row_to_dict(conn.execute(
-            "SELECT * FROM students WHERE id=?", (sid,)
+            "SELECT * FROM students WHERE id=? AND user_id=?", (sid, user_id)
         ).fetchone())
     if not student:
         return jsonify({'error': 'Not found'}), 404
@@ -209,10 +254,16 @@ def get_student(sid):
 
 @app.route('/api/students/<int:sid>', methods=['PUT'])
 def update_student(sid):
-    d = request.json
-    grade = int(d['grade'])
-    section = d.get('section') if grade == 11 else None
+    d       = request.json
+    grade   = int(d['grade'])
+    section = d.get('section')
+    user_id = uid()
     with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id FROM students WHERE id=? AND user_id=?", (sid, user_id)
+        ).fetchone()
+        if not existing:
+            return jsonify({'error': 'Not found'}), 404
         conn.execute("""
             UPDATE students SET
               name=?, grade=?, section=?, phone=?, whatsapp=?,
@@ -236,66 +287,64 @@ def update_student(sid):
 
 @app.route('/api/students/<int:sid>/payments', methods=['GET'])
 def student_payments(sid):
+    user_id = uid()
     with get_db() as conn:
+        if not conn.execute("SELECT id FROM students WHERE id=? AND user_id=?", (sid, user_id)).fetchone():
+            return jsonify({'error': 'Not found'}), 404
         rows = rows_to_list(conn.execute(
-            "SELECT * FROM payments WHERE student_id=? ORDER BY month DESC",
-            (sid,)
+            "SELECT * FROM payments WHERE student_id=? ORDER BY month DESC", (sid,)
         ).fetchall())
     return jsonify(rows)
 
 
 @app.route('/api/payments', methods=['GET'])
 def list_payments():
-    month = request.args.get('month', date.today().strftime('%Y-%m'))
+    month   = request.args.get('month', date.today().strftime('%Y-%m'))
+    user_id = uid()
     with get_db() as conn:
         rows = rows_to_list(conn.execute("""
             SELECT p.*, s.name, s.grade, s.section,
                    CASE WHEN s.grade<=8 THEN 50 ELSE 60 END AS amount_due_calc
             FROM payments p
             JOIN students s ON s.id=p.student_id
-            WHERE p.month=?
+            WHERE p.month=? AND s.user_id=?
             ORDER BY s.grade, s.name
-        """, (month,)).fetchall())
+        """, (month, user_id)).fetchall())
     return jsonify(rows)
 
 
 @app.route('/api/payments', methods=['POST'])
 def record_payment():
-    d = request.json
-    sid = int(d['student_id'])
-    month = d['month']
+    d       = request.json
+    sid     = int(d['student_id'])
+    month   = d['month']
     amount_paid = float(d['amount_paid'])
+    user_id = uid()
 
     with get_db() as conn:
         student = conn.execute(
-            "SELECT grade FROM students WHERE id=?", (sid,)
+            "SELECT grade FROM students WHERE id=? AND user_id=?", (sid, user_id)
         ).fetchone()
         if not student:
             return jsonify({'error': 'Student not found'}), 404
 
         fee = monthly_fee(student['grade'])
-
         existing = conn.execute(
-            "SELECT id FROM payments WHERE student_id=? AND month=?",
-            (sid, month)
+            "SELECT id FROM payments WHERE student_id=? AND month=?", (sid, month)
         ).fetchone()
 
         if existing:
             conn.execute("""
-                UPDATE payments
-                SET amount_paid=?, payment_date=?, notes=?
-                WHERE id=?
+                UPDATE payments SET amount_paid=?, payment_date=?, notes=? WHERE id=?
             """, (amount_paid, d.get('payment_date', date.today().isoformat()),
                   d.get('notes'), existing['id']))
             payment_id = existing['id']
         else:
             cur = conn.execute("""
-                INSERT INTO payments
-                  (student_id, month, amount_due, amount_paid, payment_date, notes)
+                INSERT INTO payments (student_id, month, amount_due, amount_paid, payment_date, notes)
                 VALUES (?,?,?,?,?,?)
             """, (sid, month, fee, amount_paid,
-                  d.get('payment_date', date.today().isoformat()),
-                  d.get('notes')))
+                  d.get('payment_date', date.today().isoformat()), d.get('notes')))
             payment_id = cur.lastrowid
 
         payment = row_to_dict(conn.execute(
@@ -309,7 +358,10 @@ def record_payment():
 
 @app.route('/api/students/<int:sid>/attendance', methods=['GET'])
 def student_attendance(sid):
+    user_id = uid()
     with get_db() as conn:
+        if not conn.execute("SELECT id FROM students WHERE id=? AND user_id=?", (sid, user_id)).fetchone():
+            return jsonify({'error': 'Not found'}), 404
         rows = rows_to_list(conn.execute(
             "SELECT * FROM attendance WHERE student_id=? ORDER BY session_date DESC, session_number",
             (sid,)
@@ -320,15 +372,16 @@ def student_attendance(sid):
 @app.route('/api/attendance', methods=['GET'])
 def list_attendance():
     session_date = request.args.get('date', date.today().isoformat())
-    grade = request.args.get('grade')
+    grade        = request.args.get('grade')
+    user_id      = uid()
 
     query = """
         SELECT a.*, s.name, s.grade, s.section
         FROM attendance a
         JOIN students s ON s.id=a.student_id
-        WHERE a.session_date=?
+        WHERE a.session_date=? AND s.user_id=?
     """
-    params = [session_date]
+    params = [session_date, user_id]
     if grade:
         query += " AND s.grade=?"
         params.append(int(grade))
@@ -344,13 +397,17 @@ def record_attendance():
     records = request.json
     if not isinstance(records, list):
         records = [records]
+    user_id = uid()
 
     saved = []
     with get_db() as conn:
         for r in records:
-            sid = int(r['student_id'])
+            sid   = int(r['student_id'])
             sdate = r['session_date']
-            snum = int(r.get('session_number', 1))
+            snum  = int(r.get('session_number', 1))
+
+            if not conn.execute("SELECT id FROM students WHERE id=? AND user_id=?", (sid, user_id)).fetchone():
+                continue
 
             existing = conn.execute(
                 "SELECT id FROM attendance WHERE student_id=? AND session_date=? AND session_number=?",
@@ -360,18 +417,14 @@ def record_attendance():
             if existing:
                 conn.execute(
                     "UPDATE attendance SET status=?, duration_hours=? WHERE id=?",
-                    (r.get('status', 'present'), float(r.get('duration_hours', 2)),
-                     existing['id'])
+                    (r.get('status', 'present'), float(r.get('duration_hours', 2)), existing['id'])
                 )
                 aid = existing['id']
             else:
                 cur = conn.execute("""
-                    INSERT INTO attendance
-                      (student_id, session_date, session_number, duration_hours, status)
+                    INSERT INTO attendance (student_id, session_date, session_number, duration_hours, status)
                     VALUES (?,?,?,?,?)
-                """, (sid, sdate, snum,
-                      float(r.get('duration_hours', 2)),
-                      r.get('status', 'present')))
+                """, (sid, sdate, snum, float(r.get('duration_hours', 2)), r.get('status', 'present')))
                 aid = cur.lastrowid
 
             saved.append(row_to_dict(conn.execute(
@@ -383,15 +436,23 @@ def record_attendance():
 
 @app.route('/api/attendance/session', methods=['GET'])
 def get_session_students():
-    grade = request.args.get('grade')
-    session_date = request.args.get('date', date.today().isoformat())
+    grade          = request.args.get('grade')
+    section        = request.args.get('section')
+    session_date   = request.args.get('date', date.today().isoformat())
     session_number = request.args.get('session_number', 1)
+    user_id        = uid()
 
     with get_db() as conn:
-        students = rows_to_list(conn.execute(
-            "SELECT id, name, grade, section FROM students WHERE active=1 AND grade=? ORDER BY name",
-            (int(grade),)
-        ).fetchall()) if grade else []
+        if not grade:
+            return jsonify([])
+
+        query  = "SELECT id, name, grade, section FROM students WHERE active=1 AND user_id=? AND grade=?"
+        params = [user_id, int(grade)]
+        if section:
+            query += " AND section=?"
+            params.append(section)
+        query += " ORDER BY name"
+        students = rows_to_list(conn.execute(query, params).fetchall())
 
         if students:
             ids = tuple(s['id'] for s in students)
@@ -415,12 +476,18 @@ def get_session_students():
 @app.route('/api/admin/export')
 def export_data():
     import json
+    user_id = uid()
     with get_db() as conn:
-        data = {
-            'students':   rows_to_list(conn.execute("SELECT * FROM students").fetchall()),
-            'payments':   rows_to_list(conn.execute("SELECT * FROM payments").fetchall()),
-            'attendance': rows_to_list(conn.execute("SELECT * FROM attendance").fetchall()),
-        }
+        students = rows_to_list(conn.execute(
+            "SELECT * FROM students WHERE user_id=?", (user_id,)
+        ).fetchall())
+        student_ids = [s['id'] for s in students]
+        payments = attendance = []
+        if student_ids:
+            ph = ','.join('?' * len(student_ids))
+            payments   = rows_to_list(conn.execute(f"SELECT * FROM payments WHERE student_id IN ({ph})", student_ids).fetchall())
+            attendance = rows_to_list(conn.execute(f"SELECT * FROM attendance WHERE student_id IN ({ph})", student_ids).fetchall())
+        data = {'students': students, 'payments': payments, 'attendance': attendance}
     return Response(
         json.dumps(data, indent=2),
         mimetype='application/json',
@@ -430,32 +497,51 @@ def export_data():
 
 @app.route('/api/admin/import', methods=['POST'])
 def import_data():
-    data = request.json or {}
+    data    = request.json or {}
+    user_id = uid()
     with get_db() as conn:
+        id_map = {}
         for s in data.get('students', []):
-            conn.execute("""
-                INSERT OR IGNORE INTO students
-                  (id, name, grade, section, phone, whatsapp,
+            existing = conn.execute(
+                "SELECT id FROM students WHERE user_id=? AND name=? AND enrollment_date=?",
+                (user_id, s['name'], s['enrollment_date'])
+            ).fetchone()
+            if existing:
+                id_map[s['id']] = existing['id']
+                continue
+            cur = conn.execute("""
+                INSERT INTO students
+                  (user_id, name, grade, section, phone, whatsapp,
                    parent_name, parent_phone, parent_whatsapp, enrollment_date, active)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?)
-            """, (s['id'], s['name'], s['grade'], s.get('section'),
+            """, (user_id, s['name'], s['grade'], s.get('section'),
                   s.get('phone'), s.get('whatsapp'), s.get('parent_name'),
                   s.get('parent_phone'), s.get('parent_whatsapp'),
                   s['enrollment_date'], s.get('active', 1)))
+            id_map[s['id']] = cur.lastrowid
+
         for p in data.get('payments', []):
+            new_sid = id_map.get(p['student_id'])
+            if not new_sid:
+                continue
             conn.execute("""
                 INSERT OR IGNORE INTO payments
-                  (id, student_id, month, amount_due, amount_paid, payment_date, notes)
-                VALUES (?,?,?,?,?,?,?)
-            """, (p['id'], p['student_id'], p['month'], p['amount_due'],
-                  p['amount_paid'], p.get('payment_date'), p.get('notes')))
+                  (student_id, month, amount_due, amount_paid, payment_date, notes)
+                VALUES (?,?,?,?,?,?)
+            """, (new_sid, p['month'], p['amount_due'], p['amount_paid'],
+                  p.get('payment_date'), p.get('notes')))
+
         for a in data.get('attendance', []):
+            new_sid = id_map.get(a['student_id'])
+            if not new_sid:
+                continue
             conn.execute("""
                 INSERT OR IGNORE INTO attendance
-                  (id, student_id, session_date, session_number, duration_hours, status)
-                VALUES (?,?,?,?,?,?)
-            """, (a['id'], a['student_id'], a['session_date'], a['session_number'],
+                  (student_id, session_date, session_number, duration_hours, status)
+                VALUES (?,?,?,?,?)
+            """, (new_sid, a['session_date'], a['session_number'],
                   a['duration_hours'], a['status']))
+
     return jsonify({'ok': True, 'imported': {
         'students':   len(data.get('students', [])),
         'payments':   len(data.get('payments', [])),
@@ -464,7 +550,7 @@ def import_data():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 3000))
+    port     = int(os.environ.get('PORT', 3000))
     is_local = 'PORT' not in os.environ
     if is_local:
         webbrowser.open(f'http://localhost:{port}')

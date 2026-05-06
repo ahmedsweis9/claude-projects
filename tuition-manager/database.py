@@ -18,8 +18,17 @@ def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     with get_db() as conn:
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS users (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT    NOT NULL,
+                email       TEXT    NOT NULL UNIQUE,
+                password    TEXT    NOT NULL,
+                created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS students (
                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id          INTEGER REFERENCES users(id),
                 name             TEXT    NOT NULL,
                 grade            INTEGER NOT NULL CHECK(grade BETWEEN 5 AND 12),
                 section          TEXT    CHECK(section IN ('boys','girls') OR section IS NULL),
@@ -52,6 +61,10 @@ def init_db():
                                        CHECK(status IN ('present','absent','excused'))
             );
         """)
+        # Migration: add user_id column to existing students tables
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(students)").fetchall()]
+        if 'user_id' not in cols:
+            conn.execute("ALTER TABLE students ADD COLUMN user_id INTEGER REFERENCES users(id)")
 
 
 def monthly_fee(grade: int) -> float:
