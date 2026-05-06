@@ -1,20 +1,25 @@
+import hmac
 import os
 import calendar
 import webbrowser
 from datetime import date
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, session, redirect, Response
 from database import get_db, init_db, monthly_fee, row_to_dict, rows_to_list
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 
 def calc_due_day(enrollment_date_str: str, year: int, month: int) -> int:
-    """Return the payment due day for a given month, clamped to the last day of that month."""
     enroll_day = int(enrollment_date_str.split('-')[2])
     last_day = calendar.monthrange(year, month)[1]
     return min(enroll_day, last_day)
 
 
 def annotate_due(students: list, month_str: str) -> list:
-    """Add due_day, due_date, and not_yet_due to each student dict."""
     today = date.today()
     current_month = today.strftime('%Y-%m')
     y, m = map(int, month_str.split('-'))
@@ -25,9 +30,48 @@ def annotate_due(students: list, month_str: str) -> list:
         s['not_yet_due'] = (month_str == current_month) and (today.day < dd)
     return students
 
-app = Flask(__name__, static_folder='public', static_url_path='')
 
-# ── Static pages ─────────────────────────────────────────────────────────────
+app = Flask(__name__, static_folder='public', static_url_path='')
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
+
+ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'test1')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'test123')
+
+init_db()
+
+_OPEN_PREFIXES = ('/login.html', '/api/login', '/css/', '/js/auth.js')
+
+
+@app.before_request
+def require_login():
+    if any(request.path == p or request.path.startswith(p) for p in _OPEN_PREFIXES):
+        return
+    if not session.get('logged_in'):
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Unauthorized'}), 401
+        return redirect('/login.html')
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    d = request.json or {}
+    ok = (hmac.compare_digest(d.get('username', ''), ADMIN_USERNAME) and
+          hmac.compare_digest(d.get('password', ''), ADMIN_PASSWORD))
+    if ok:
+        session['logged_in'] = True
+        return jsonify({'ok': True})
+    return jsonify({'error': 'Invalid credentials'}), 401
+
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    session.clear()
+    return jsonify({'ok': True})
+
+
+# ── Static pages ──────────────────────────────────────────────────────────────
 
 @app.route('/')
 def index():
@@ -60,7 +104,6 @@ def dashboard():
             (month,)
         ).fetchone()[0]
 
-        # All active students who haven't fully paid this month
         candidates = rows_to_list(conn.execute("""
             SELECT s.id, s.name, s.grade, s.section,
                    s.enrollment_date, s.parent_phone, s.parent_whatsapp,
@@ -73,7 +116,6 @@ def dashboard():
             ORDER BY s.grade, s.name
         """, (month,)).fetchall())
 
-        # Annotate with due date and filter out students not yet due this month
         annotate_due(candidates, month)
         unpaid = [s for s in candidates if not s['not_yet_due']]
 
@@ -233,7 +275,6 @@ def record_payment():
 
         fee = monthly_fee(student['grade'])
 
-        # Upsert: if a record exists for this month, update it
         existing = conn.execute(
             "SELECT id FROM payments WHERE student_id=? AND month=?",
             (sid, month)
@@ -300,10 +341,6 @@ def list_attendance():
 
 @app.route('/api/attendance', methods=['POST'])
 def record_attendance():
-    """
-    Accepts a list of attendance records:
-    [{ student_id, session_date, session_number, duration_hours, status }, ...]
-    """
     records = request.json
     if not isinstance(records, list):
         records = [records]
@@ -346,7 +383,6 @@ def record_attendance():
 
 @app.route('/api/attendance/session', methods=['GET'])
 def get_session_students():
-    """Return students for a grade so the attendance page can build a checklist."""
     grade = request.args.get('grade')
     session_date = request.args.get('date', date.today().isoformat())
     session_number = request.args.get('session_number', 1)
@@ -357,7 +393,6 @@ def get_session_students():
             (int(grade),)
         ).fetchall()) if grade else []
 
-        # Pull any existing attendance for this session
         if students:
             ids = tuple(s['id'] for s in students)
             placeholders = ','.join('?' * len(ids))
@@ -375,7 +410,62 @@ def get_session_students():
     return jsonify(students)
 
 
+# ── Data export / import ──────────────────────────────────────────────────────
+
+@app.route('/api/admin/export')
+def export_data():
+    import json
+    with get_db() as conn:
+        data = {
+            'students':   rows_to_list(conn.execute("SELECT * FROM students").fetchall()),
+            'payments':   rows_to_list(conn.execute("SELECT * FROM payments").fetchall()),
+            'attendance': rows_to_list(conn.execute("SELECT * FROM attendance").fetchall()),
+        }
+    return Response(
+        json.dumps(data, indent=2),
+        mimetype='application/json',
+        headers={'Content-Disposition': 'attachment; filename=tuition-backup.json'}
+    )
+
+
+@app.route('/api/admin/import', methods=['POST'])
+def import_data():
+    data = request.json or {}
+    with get_db() as conn:
+        for s in data.get('students', []):
+            conn.execute("""
+                INSERT OR IGNORE INTO students
+                  (id, name, grade, section, phone, whatsapp,
+                   parent_name, parent_phone, parent_whatsapp, enrollment_date, active)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, (s['id'], s['name'], s['grade'], s.get('section'),
+                  s.get('phone'), s.get('whatsapp'), s.get('parent_name'),
+                  s.get('parent_phone'), s.get('parent_whatsapp'),
+                  s['enrollment_date'], s.get('active', 1)))
+        for p in data.get('payments', []):
+            conn.execute("""
+                INSERT OR IGNORE INTO payments
+                  (id, student_id, month, amount_due, amount_paid, payment_date, notes)
+                VALUES (?,?,?,?,?,?,?)
+            """, (p['id'], p['student_id'], p['month'], p['amount_due'],
+                  p['amount_paid'], p.get('payment_date'), p.get('notes')))
+        for a in data.get('attendance', []):
+            conn.execute("""
+                INSERT OR IGNORE INTO attendance
+                  (id, student_id, session_date, session_number, duration_hours, status)
+                VALUES (?,?,?,?,?,?)
+            """, (a['id'], a['student_id'], a['session_date'], a['session_number'],
+                  a['duration_hours'], a['status']))
+    return jsonify({'ok': True, 'imported': {
+        'students':   len(data.get('students', [])),
+        'payments':   len(data.get('payments', [])),
+        'attendance': len(data.get('attendance', [])),
+    }})
+
+
 if __name__ == '__main__':
-    init_db()
-    webbrowser.open('http://localhost:3000')
-    app.run(port=3000, debug=False)
+    port = int(os.environ.get('PORT', 3000))
+    is_local = 'PORT' not in os.environ
+    if is_local:
+        webbrowser.open(f'http://localhost:{port}')
+    app.run(host='0.0.0.0', port=port, debug=is_local)

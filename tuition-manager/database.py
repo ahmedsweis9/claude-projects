@@ -1,7 +1,10 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'tuition.db')
+DB_PATH = os.environ.get(
+    'DATABASE_PATH',
+    os.path.join(os.path.dirname(__file__), 'data', 'tuition.db')
+)
 
 
 def get_db():
