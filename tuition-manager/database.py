@@ -34,13 +34,19 @@ if IS_PG:
         with get_db() as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
-                    id         SERIAL PRIMARY KEY,
-                    name       TEXT   NOT NULL,
-                    email      TEXT   NOT NULL UNIQUE,
-                    password   TEXT   NOT NULL,
-                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    id                   SERIAL PRIMARY KEY,
+                    name                 TEXT   NOT NULL,
+                    email                TEXT   NOT NULL UNIQUE,
+                    username             TEXT   UNIQUE,
+                    password             TEXT   NOT NULL,
+                    reset_token          TEXT,
+                    reset_token_expires  TEXT,
+                    created_at           TIMESTAMP NOT NULL DEFAULT NOW()
                 )
             """)
+            conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT UNIQUE")
+            conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT")
+            conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TEXT")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS students (
                     id              SERIAL PRIMARY KEY,
@@ -108,11 +114,14 @@ else:
         with get_db() as conn:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS users (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name        TEXT    NOT NULL,
-                    email       TEXT    NOT NULL UNIQUE,
-                    password    TEXT    NOT NULL,
-                    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name                TEXT    NOT NULL,
+                    email               TEXT    NOT NULL UNIQUE,
+                    username            TEXT    UNIQUE,
+                    password            TEXT    NOT NULL,
+                    reset_token         TEXT,
+                    reset_token_expires TEXT,
+                    created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
                 );
                 CREATE TABLE IF NOT EXISTS students (
                     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,9 +158,17 @@ else:
                     UNIQUE(student_id, session_date, session_number)
                 );
             """)
-            cols = [row[1] for row in conn.execute('PRAGMA table_info(students)').fetchall()]
-            if 'user_id' not in cols:
+            scols = [row[1] for row in conn.execute('PRAGMA table_info(students)').fetchall()]
+            if 'user_id' not in scols:
                 conn.execute('ALTER TABLE students ADD COLUMN user_id INTEGER REFERENCES users(id)')
+
+            ucols = [row[1] for row in conn.execute('PRAGMA table_info(users)').fetchall()]
+            if 'username' not in ucols:
+                conn.execute('ALTER TABLE users ADD COLUMN username TEXT UNIQUE')
+            if 'reset_token' not in ucols:
+                conn.execute('ALTER TABLE users ADD COLUMN reset_token TEXT')
+            if 'reset_token_expires' not in ucols:
+                conn.execute('ALTER TABLE users ADD COLUMN reset_token_expires TEXT')
 
     def insert_returning_id(conn, sql, params):
         return conn.execute(sql, params).lastrowid

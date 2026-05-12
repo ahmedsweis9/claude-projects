@@ -59,8 +59,9 @@ async function loadStudents() {
       <td>${s.parent_phone || '<span class="text-muted">—</span>'}</td>
       <td>${s.enrollment_date}</td>
       <td>${badge}</td>
-      <td class="text-right">
+      <td class="text-right" style="display:flex;gap:6px;justify-content:flex-end">
         <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(s)})'>Edit</button>
+        <button class="btn btn-sm" style="background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b" onclick="deleteStudent(${s.id}, ${JSON.stringify(s.name)})">Delete</button>
       </td>
     </tr>`;
   }).join('');
@@ -127,6 +128,13 @@ async function submitStudent(e) {
   const method = id ? 'PUT' : 'POST';
   await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
   closeModal();
+  loadStudents();
+}
+
+async function deleteStudent(id, name) {
+  if (!confirm(`Permanently delete "${name}"?\n\nThis will also delete all their payments and attendance records. This cannot be undone.`)) return;
+  if (!confirm(`Are you sure? All data for "${name}" will be gone forever.`)) return;
+  await fetch(`/api/students/${id}`, { method: 'DELETE' });
   loadStudents();
 }
 

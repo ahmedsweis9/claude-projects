@@ -65,6 +65,21 @@
   </div>
 
   <div class="card">
+    <div class="card-header">Annual Grade Promotion</div>
+    <div class="card-body">
+      <p style="font-size:13px;color:#6b7280;margin-bottom:8px">
+        Run this at the start of July each year. All active students advance one grade;
+        Grade 12 students are automatically archived (graduated).
+      </p>
+      <p style="font-size:13px;color:#dc2626;margin-bottom:16px;font-weight:600">
+        &#9888; This is irreversible. Use individual student "Rollback Grade" for students who fail.
+      </p>
+      <button class="btn btn-primary" onclick="doPromote()" id="promote-btn">&#8593; Promote All Grades</button>
+      <div id="promote-result" style="display:none;margin-top:16px;padding:12px 16px;border-radius:8px;font-size:13px"></div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header">Import Data</div>
     <div class="card-body">
       <p style="font-size:13px;color:#6b7280;margin-bottom:16px">
@@ -127,6 +142,31 @@
     el.style.border     = ok ? '1px solid #86efac' : '1px solid #fca5a5';
     el.style.color      = ok ? '#166534' : '#dc2626';
     el.textContent      = (ok ? '✓ ' : '✗ ') + msg;
+  }
+
+  async function doPromote() {
+    if (!confirm('Promote all active students up one grade?\n\nGrade 12 students will be archived.\n\nThis cannot be undone — make sure you have a backup first.')) return;
+    if (!confirm('Second confirmation: Are you sure you want to run the annual promotion now?')) return;
+    const btn    = document.getElementById('promote-btn');
+    const result = document.getElementById('promote-result');
+    btn.disabled = true; btn.textContent = 'Promoting…'; result.style.display = 'none';
+
+    const res = await fetch('/api/admin/promote-grades', { method: 'POST' });
+    const d   = await res.json().catch(() => ({}));
+
+    result.style.display = 'block';
+    if (res.ok) {
+      result.style.background = '#052e16';
+      result.style.border     = '1px solid #166534';
+      result.style.color      = '#86efac';
+      result.textContent = `✓ Done. ${d.promoted} student(s) promoted; ${d.archived} Grade 12 student(s) archived.`;
+    } else {
+      result.style.background = '#450a0a';
+      result.style.border     = '1px solid #991b1b';
+      result.style.color      = '#fca5a5';
+      result.textContent = '✗ Something went wrong. Please try again.';
+    }
+    btn.disabled = false; btn.textContent = '↑ Promote All Grades';
   }
 </script>
 </body>

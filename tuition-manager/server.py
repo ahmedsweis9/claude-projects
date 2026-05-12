@@ -1,17 +1,28 @@
 import hmac
 import os
+import secrets
 import calendar
+import smtplib
 import webbrowser
-from datetime import date
-from flask import Flask, jsonify, request, send_from_directory, session, redirect, Response
-from werkzeug.security import generate_password_hash, check_password_hash
-from database import get_db, init_db, monthly_fee, row_to_dict, rows_to_list, insert_returning_id, IGNORE, CONFLICT_IGNORE
+from datetime import date, datetime, timedelta
+from email.mime.text import MIMEText
 
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     pass
+
+from flask import Flask, jsonify, request, send_from_directory, session, redirect, Response
+from werkzeug.security import generate_password_hash, check_password_hash
+from database import get_db, init_db, monthly_fee, row_to_dict, rows_to_list, insert_returning_id, IGNORE, CONFLICT_IGNORE
+
+SMTP_HOST = os.environ.get('SMTP_HOST')
+SMTP_PORT = int(os.environ.get('SMTP_PORT', '587'))
+SMTP_USER = os.environ.get('SMTP_USER')
+SMTP_PASS = os.environ.get('SMTP_PASS')
+SMTP_FROM = os.environ.get('SMTP_FROM', SMTP_USER)
+APP_URL   = os.environ.get('APP_URL', 'http://localhost:3000')
 
 
 def calc_due_day(enrollment_date_str: str, year: int, month: int) -> int:
@@ -41,7 +52,11 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
 
 init_db()
 
-_OPEN_PREFIXES = ('/login.html', '/signup.html', '/api/login', '/api/signup', '/css/', '/js/auth.js')
+_OPEN_PREFIXES = (
+    '/login.html', '/signup.html', '/forgot-password.html', '/reset-password.html',
+    '/api/login', '/api/signup', '/api/forgot-password', '/api/reset-password',
+    '/css/', '/js/auth.js',
+)
 
 
 @app.before_request
@@ -56,43 +71,119 @@ def require_login():
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
+def _make_username(name: str) -> str:
+    import re
+    base = re.sub(r'[^a-z0-9_]', '', name.lower().replace(' ', '_'))[:20] or 'user'
+    return base
+
+
 @app.route('/api/signup', methods=['POST'])
 def signup():
-    d = request.json or {}
+    d        = request.json or {}
     name     = d.get('name', '').strip()
     email    = d.get('email', '').strip().lower()
+    username = d.get('username', '').strip().lower()
     password = d.get('password', '')
     if not name or not email or not password:
         return jsonify({'error': 'All fields are required'}), 400
     if len(password) < 6:
         return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    import re
+    if username and not re.match(r'^[a-z0-9_]{3,20}$', username):
+        return jsonify({'error': 'Username must be 3-20 characters: letters, numbers, underscores only'}), 400
+    if not username:
+        username = _make_username(name)
     pw_hash = generate_password_hash(password)
     with get_db() as conn:
         if conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone():
             return jsonify({'error': 'Email already registered'}), 400
+        if conn.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone():
+            username = username[:17] + secrets.token_hex(1)
         user_id = insert_returning_id(conn,
-            "INSERT INTO users (name, email, password) VALUES (?,?,?)",
-            (name, email, pw_hash)
+            "INSERT INTO users (name, email, username, password) VALUES (?,?,?,?)",
+            (name, email, username, pw_hash)
         )
     session['user_id']   = user_id
     session['user_name'] = name
-    return jsonify({'ok': True, 'name': name})
+    return jsonify({'ok': True, 'name': name, 'username': username})
 
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    d = request.json or {}
-    email    = d.get('email', '').strip().lower()
+    d        = request.json or {}
+    identity = d.get('identity', d.get('email', '')).strip().lower()
     password = d.get('password', '')
     with get_db() as conn:
         user = row_to_dict(conn.execute(
-            "SELECT * FROM users WHERE email=?", (email,)
+            "SELECT * FROM users WHERE email=? OR username=?", (identity, identity)
         ).fetchone())
     if not user or not check_password_hash(user['password'], password):
-        return jsonify({'error': 'Invalid email or password'}), 401
+        return jsonify({'error': 'Invalid email/username or password'}), 401
     session['user_id']   = user['id']
     session['user_name'] = user['name']
     return jsonify({'ok': True, 'name': user['name']})
+
+
+@app.route('/api/forgot-password', methods=['POST'])
+def forgot_password():
+    d     = request.json or {}
+    email = d.get('email', '').strip().lower()
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+    token   = secrets.token_urlsafe(32)
+    expires = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+    with get_db() as conn:
+        user = row_to_dict(conn.execute(
+            "SELECT id, name FROM users WHERE email=?", (email,)
+        ).fetchone())
+        if user:
+            conn.execute(
+                "UPDATE users SET reset_token=?, reset_token_expires=? WHERE id=?",
+                (token, expires, user['id'])
+            )
+    reset_url = f"{APP_URL}/reset-password.html?token={token}"
+    if user and SMTP_HOST and SMTP_USER and SMTP_PASS:
+        try:
+            msg = MIMEText(
+                f"Hi {user['name']},\n\nClick the link below to reset your password (expires in 1 hour):\n\n{reset_url}\n\nIf you did not request this, ignore this email."
+            )
+            msg['Subject'] = 'Tuition Manager — Password Reset'
+            msg['From']    = SMTP_FROM
+            msg['To']      = email
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+                s.starttls()
+                s.login(SMTP_USER, SMTP_PASS)
+                s.sendmail(SMTP_FROM, [email], msg.as_string())
+            return jsonify({'ok': True, 'method': 'email'})
+        except Exception:
+            pass
+    if user:
+        return jsonify({'ok': True, 'method': 'link', 'reset_url': reset_url})
+    return jsonify({'ok': True, 'method': 'none'})
+
+
+@app.route('/api/reset-password', methods=['POST'])
+def reset_password():
+    d        = request.json or {}
+    token    = d.get('token', '').strip()
+    password = d.get('password', '')
+    if not token or not password:
+        return jsonify({'error': 'Token and new password are required'}), 400
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    now = datetime.utcnow().isoformat()
+    with get_db() as conn:
+        user = row_to_dict(conn.execute(
+            "SELECT id FROM users WHERE reset_token=? AND reset_token_expires > ?",
+            (token, now)
+        ).fetchone())
+        if not user:
+            return jsonify({'error': 'Invalid or expired reset link'}), 400
+        conn.execute(
+            "UPDATE users SET password=?, reset_token=NULL, reset_token_expires=NULL WHERE id=?",
+            (generate_password_hash(password), user['id'])
+        )
+    return jsonify({'ok': True})
 
 
 @app.route('/api/logout', methods=['POST'])
@@ -103,10 +194,9 @@ def logout():
 
 @app.route('/api/me')
 def me():
-    user = None
     with get_db() as conn:
         user = row_to_dict(conn.execute(
-            "SELECT id, name, email FROM users WHERE id=?", (uid(),)
+            "SELECT id, name, email, username FROM users WHERE id=?", (uid(),)
         ).fetchone())
     return jsonify(user or {})
 
@@ -250,6 +340,21 @@ def get_student(sid):
     return jsonify(student)
 
 
+@app.route('/api/students/<int:sid>', methods=['DELETE'])
+def delete_student(sid):
+    user_id = uid()
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id FROM students WHERE id=? AND user_id=?", (sid, user_id)
+        ).fetchone()
+        if not existing:
+            return jsonify({'error': 'Not found'}), 404
+        conn.execute("DELETE FROM attendance WHERE student_id=?", (sid,))
+        conn.execute("DELETE FROM payments WHERE student_id=?", (sid,))
+        conn.execute("DELETE FROM students WHERE id=?", (sid,))
+    return jsonify({'ok': True})
+
+
 @app.route('/api/students/<int:sid>', methods=['PUT'])
 def update_student(sid):
     d       = request.json
@@ -279,6 +384,42 @@ def update_student(sid):
             "SELECT * FROM students WHERE id=?", (sid,)
         ).fetchone())
     return jsonify(student)
+
+
+@app.route('/api/students/<int:sid>/rollback-grade', methods=['POST'])
+def rollback_grade(sid):
+    user_id = uid()
+    with get_db() as conn:
+        student = row_to_dict(conn.execute(
+            "SELECT id, grade FROM students WHERE id=? AND user_id=?", (sid, user_id)
+        ).fetchone())
+        if not student:
+            return jsonify({'error': 'Not found'}), 404
+        if student['grade'] <= 5:
+            return jsonify({'error': 'Student is already in Grade 5'}), 400
+        new_grade = student['grade'] - 1
+        conn.execute("UPDATE students SET grade=? WHERE id=?", (new_grade, sid))
+        updated = row_to_dict(conn.execute("SELECT * FROM students WHERE id=?", (sid,)).fetchone())
+    return jsonify(updated)
+
+
+@app.route('/api/admin/promote-grades', methods=['POST'])
+def promote_grades():
+    user_id = uid()
+    with get_db() as conn:
+        archived = conn.execute(
+            "SELECT COUNT(*) FROM students WHERE active=1 AND grade=12 AND user_id=?", (user_id,)
+        ).fetchone()[0]
+        promoted = conn.execute(
+            "SELECT COUNT(*) FROM students WHERE active=1 AND grade<12 AND user_id=?", (user_id,)
+        ).fetchone()[0]
+        conn.execute(
+            "UPDATE students SET active=0 WHERE active=1 AND grade=12 AND user_id=?", (user_id,)
+        )
+        conn.execute(
+            "UPDATE students SET grade=grade+1 WHERE active=1 AND grade<12 AND user_id=?", (user_id,)
+        )
+    return jsonify({'ok': True, 'promoted': promoted, 'archived': archived})
 
 
 # ── Payments ──────────────────────────────────────────────────────────────────

@@ -168,6 +168,23 @@ async function submitPayment(e) {
   load();
 }
 
+async function doRollback() {
+  if (!studentData) return;
+  if (studentData.grade <= 5) { alert('Student is already in Grade 5.'); return; }
+  const from = studentData.grade;
+  if (!confirm(`Move ${studentData.name} from Grade ${from} back to Grade ${from - 1}?\n\nUse this when a student has failed and needs to repeat a year.`)) return;
+  const res = await fetch(`/api/students/${sid}/rollback-grade`, { method: 'POST' });
+  if (res.ok) { load(); } else { alert('Could not rollback grade.'); }
+}
+
+async function doDelete() {
+  if (!studentData) return;
+  if (!confirm(`Permanently delete "${studentData.name}"?\n\nThis will also delete all their payments and attendance records. This cannot be undone.`)) return;
+  if (!confirm(`Are you absolutely sure? All data for "${studentData.name}" will be gone forever.`)) return;
+  const res = await fetch(`/api/students/${sid}`, { method: 'DELETE' });
+  if (res.ok) { window.location.href = '/students.html'; } else { alert('Could not delete student.'); }
+}
+
 function fmtMonth(m) {
   const [y, mo] = m.split('-');
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];

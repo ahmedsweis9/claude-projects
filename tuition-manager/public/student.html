@@ -56,9 +56,11 @@
         <h1 class="page-title" id="student-name">Loading…</h1>
         <p class="page-sub mb-0" id="student-meta"></p>
       </div>
-      <div class="flex gap-8">
+      <div class="flex gap-8" style="flex-wrap:wrap">
         <button class="btn btn-outline" onclick="openEditModal()">Edit Info</button>
+        <button class="btn btn-outline" onclick="doRollback()" title="Move student back one grade (e.g. if they failed)">&#8595; Rollback Grade</button>
         <button class="btn btn-primary" onclick="openPaymentModal()">Record Payment</button>
+        <button class="btn" style="background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b" onclick="doDelete()">Delete Student</button>
       </div>
     </div>
   </div>
